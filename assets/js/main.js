@@ -9,15 +9,15 @@
 import {
   COLUMNS, BAR_SCALE_NOTE, NOTE_MARK, costSentence, firstSentence,
   caveatHref, defHref, methodHref, slugify, fmtDate, el, EFFORT_RANK,
-} from './format.js?v=1b1c4223ef';
-import { renderHead, renderBody, renderColgroup } from './table.js?v=1b1c4223ef';
+} from './format.js?v=7491ca6787';
+import { renderHead, renderBody, renderColgroup } from './table.js?v=7491ca6787';
 import {
   renderScatter, AXES, SCALES, scaledAxis, scaleSentence,
-} from './scatter.js?v=1b1c4223ef';
-import { renderPicker, refreshGroups } from './selector.js?v=1b1c4223ef';
-import { exportView } from './export-png.js?v=1b1c4223ef';
-import { initTheme, hasAdjustedColors } from './theme.js?v=1b1c4223ef';
-import { renderCoverage, coverageOrderNote, coverageSummaryNote } from './coverage.js?v=1b1c4223ef';
+} from './scatter.js?v=7491ca6787';
+import { renderPicker, refreshGroups } from './selector.js?v=7491ca6787';
+import { exportView } from './export-png.js?v=7491ca6787';
+import { initTheme, hasAdjustedColors } from './theme.js?v=7491ca6787';
+import { renderCoverage, coverageOrderNote, coverageSummaryNote } from './coverage.js?v=7491ca6787';
 
 const PRESETS = {
   featured: { test: (r) => r.featured === true, name: 'Featured runs' },
@@ -169,17 +169,20 @@ function readUrl() {
     state.preset = detectPreset();
   } else {
     const preset = p.get('preset');
-    applyPreset(PRESETS[preset] ? preset : 'featured');
+    // own keys only: ?preset=toString would otherwise find Object.prototype's and throw
+    applyPreset(Object.hasOwn(PRESETS, preset) ? preset : 'featured');
   }
   /* A sort key that is no longer a column — an old ?sort=claimed_only link, say —
      is simply not applied, and the board opens on its default sort. A stale link
-     has to degrade, never throw. */
+     has to degrade, never throw. Every field is SET from the link, not just
+     updated when present: on back/forward this runs against the live state, and a
+     link that names no sort means the default sort, not whatever was on screen. */
   const sort = p.get('sort');
-  if (sort && COLUMNS.some((c) => c.key === sort)) state.sort = sort;
+  state.sort = COLUMNS.some((c) => c.key === sort) ? sort : 'fixed';
   const dir = p.get('dir');
-  if (dir === 'asc' || dir === 'desc') state.dir = dir;
+  state.dir = dir === 'asc' ? 'asc' : 'desc';
   const view = p.get('view');
-  if (VIEWS[view]) state.view = view;
+  state.view = Object.hasOwn(VIEWS, view) ? view : 'table';
   // ?x= belongs to the map the link opens on; anything else there is ignored
   state.scale = {};
   const x = p.get('x');
