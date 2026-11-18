@@ -12,10 +12,10 @@ import {
   COLUMNS, GROUPS, TOTALS, BAR_SCALE_NOTE, NOTE_MARK, fmtCost, fmtWall, fmtInt,
   fmtDate, barRatio, barScales, effortSuffix, compareRuns, firstSentence,
   costSentence, segmentsText,
-} from './format.js?v=7491ca6787';
-import { scatterLayout, resolveAxis } from './scatter.js?v=7491ca6787';
-import { coverageLayout, coverageOrderNote, coverageSummaryNote, coverageColor } from './coverage.js?v=7491ca6787';
-import { runColor, activeTheme } from './theme.js?v=7491ca6787';
+} from './format.js?v=b6d46ab77f';
+import { scatterLayout, resolveAxis } from './scatter.js?v=b6d46ab77f';
+import { coverageLayout, coverageOrderNote, coverageSummaryNote, coverageColor } from './coverage.js?v=b6d46ab77f';
+import { runColor, activeTheme } from './theme.js?v=b6d46ab77f';
 
 const SCALE = 2;
 const PAD = 32;

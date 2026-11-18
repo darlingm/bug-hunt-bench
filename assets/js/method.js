@@ -8,8 +8,8 @@
    straight at them: a reader who clicks "cost tag" under the table should land
    on that definition, not at the top of this page. */
 
-import { glossaryTerm, fmtDate, el } from './format.js?v=7491ca6787';
-import { initTheme } from './theme.js?v=7491ca6787';
+import { glossaryTerm, fmtDate, el } from './format.js?v=b6d46ab77f';
+import { initTheme } from './theme.js?v=b6d46ab77f';
 
 const $ = (id) => document.getElementById(id);
 
@@ -71,6 +71,9 @@ async function boot() {
   const DATA = await res.json();
   render(DATA);
   initTheme();
+  // theme-boot.js marks every page as loading before first paint; the board clears
+  // it once drawn, and this page has to as well or it stays loading forever
+  document.documentElement.classList.remove('is-loading');
   scrollToHash();
   /* The web fonts land after the first paint and reflow everything above the
      target, so a jump made before they arrive lands short. Do it once more when
@@ -80,6 +83,8 @@ async function boot() {
 }
 
 boot().catch((err) => {
+  // a failed load must look failed, not loading
+  document.documentElement.classList.remove('is-loading');
   const host = $('method-body');
   if (host) {
     host.textContent = '';
