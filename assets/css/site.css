@@ -449,6 +449,38 @@ h1 em { font-style: normal; color: var(--accent); }
   font-size: 12px; color: var(--muted); margin: 12px 0 0; max-width: 76ch;
 }
 
+/* The cost basis: the board's second reading of the cost column (subscriber.js).
+   A display setting, not a selection, so it sits under the picker on its own
+   hairline, wearing the presets' segmented buttons. The multiplier fields only
+   exist while subscriber cost is on; they are data entry, so they get a plate
+   and tabular figures, and nothing louder. */
+.costbasis {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+  margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--hairline);
+}
+.costbasis__title {
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+}
+.costbasis__rates {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px;
+  font-size: 12.5px; color: var(--muted);
+}
+.costbasis__rate { display: inline-flex; align-items: center; gap: 5px; cursor: text; }
+.costbasis__name { color: var(--ink-2); }
+.costbasis__times { color: var(--neutral); }
+.costbasis__input {
+  font: inherit; font-size: 12.5px; width: 4.4em; padding: 5px 6px;
+  border: 1px solid var(--hairline); border-radius: 3px;
+  background: var(--plate); color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.costbasis__input:hover { border-color: var(--rule); }
+.costbasis__input:invalid { border-color: var(--tick-survivor); }
+.costbasis__reset { font-size: 12px; }
+.costbasis__note {
+  font-size: 12px; color: var(--muted); margin: 8px 0 0; max-width: 92ch;
+}
+
 /* ------------------------------------------------------------------- views */
 
 .views { padding-block: clamp(20px, 2.8vw, 34px) 0; }
@@ -973,6 +1005,18 @@ h1 em { font-style: normal; color: var(--accent); }
   margin: 0; font-family: var(--serif); font-size: 1.24rem; line-height: 1.62;
   color: var(--ink-2); text-wrap: pretty;
 }
+
+/* The subscriber-cost section (method.js, from data/subscriber-rates.json): the
+   argument in the method's own serif, the rates as glossary rows, then where it
+   stops as caveats - three shapes the page already has, nothing new to learn. */
+.prose__p {
+  margin: 0 0 26px; max-width: 82ch;
+  font-family: var(--serif); font-size: 1.24rem; line-height: 1.62;
+  color: var(--ink-2); text-wrap: pretty;
+}
+.prose .subhead { margin: 36px 0 12px; }
+.glossary dd .rate__plans { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 4px; }
+.glossary dd .rate__sources { display: block; margin-top: 6px; font-size: 12.5px; }
 
 .caveats { list-style: none; margin: 0; padding: 0; max-width: 82ch; }
 .caveats li {

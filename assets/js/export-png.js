@@ -11,11 +11,11 @@
 import {
   COLUMNS, GROUPS, TOTALS, BAR_SCALE_NOTE, NOTE_MARK, fmtCost, fmtWall, fmtInt,
   fmtDate, barRatio, barScales, effortSuffix, compareRuns, firstSentence,
-  costSentence, segmentsText,
-} from './format.js?v=b6d46ab77f';
-import { scatterLayout, resolveAxis } from './scatter.js?v=b6d46ab77f';
-import { coverageLayout, coverageOrderNote, coverageSummaryNote, coverageColor } from './coverage.js?v=b6d46ab77f';
-import { runColor, activeTheme } from './theme.js?v=b6d46ab77f';
+  costSentence, segmentsText, costField, columnLabel, sortField,
+} from './format.js?v=b13c489aa2';
+import { scatterLayout, resolveAxis } from './scatter.js?v=b13c489aa2';
+import { coverageLayout, coverageOrderNote, coverageSummaryNote, coverageColor } from './coverage.js?v=b13c489aa2';
+import { runColor, activeTheme } from './theme.js?v=b13c489aa2';
 
 const SCALE = 2;
 const PAD = 32;
@@ -192,8 +192,9 @@ function drawTable(ctx, T, runs, state, w) {
   /* the same geometry as the screen: every bar scaled to the longest figure
      among the rows ON THIS CARD, so an exported selection reads like the
      selection it was exported from */
-  const { fixedMax, extrasMax, wallMax, costMax } = barScales(runs);
-  const cols = COLUMNS.map((c) => ({ ...c }));
+  const costKey = costField(state);
+  const { fixedMax, extrasMax, wallMax, costMax } = barScales(runs, costKey);
+  const cols = COLUMNS.map((c) => ({ ...c, label: columnLabel(c, state) }));
   const totalW = cols.reduce((s, c) => s + c.w, 0);
   const scale = (w - PAD * 2) / totalW;
   let x = PAD;
@@ -264,9 +265,9 @@ function drawTable(ctx, T, runs, state, w) {
     extras: Math.max(28, 10 + widest(runs.map((r) => fmtInt(r.extras)), `12px ${SANS}`) + 8),
     wall: Math.max(62, 13 + widest(runs.filter((r) => has(r.wall_min)).map((r) => fmtWall(r.wall_min)),
       `12.5px ${SANS}`) + widest(['min'], `10px ${SANS}`) + 8),
-    cost: Math.max(56, 10 + widest(runs.map((r) => fmtCost(r.cost_usd)), `12.5px ${SANS}`) + 8),
+    cost: Math.max(56, 10 + widest(runs.map((r) => fmtCost(r[costKey])), `12.5px ${SANS}`) + 8),
   };
-  const sorted = runs.slice().sort((a, b) => compareRuns(a, b, state.sort, state.dir));
+  const sorted = runs.slice().sort((a, b) => compareRuns(a, b, sortField(state), state.dir));
 
   sorted.forEach((run) => {
     const top = y;
@@ -313,9 +314,10 @@ function drawTable(ctx, T, runs, state, w) {
         }
       } else if (c.key === 'cost_usd') {
         // the figure only; which of these are bills and which are estimates is
-        // one generated sentence in the footer, as it is in the key on the page
-        const end = drawBar(c, top + 13, barRatio(run.cost_usd, costMax), 13, T.bar, reserve.cost);
-        text(ctx, fmtCost(run.cost_usd), end + 10, baseline + 2, `12.5px ${SANS}`, T.ink2);
+        // one generated sentence in the footer, as it is in the key on the page;
+        // on subscriber cost, that figure, and its definition in the footer instead
+        const end = drawBar(c, top + 13, barRatio(run[costKey], costMax), 13, T.bar, reserve.cost);
+        text(ctx, fmtCost(run[costKey]), end + 10, baseline + 2, `12.5px ${SANS}`, T.ink2);
       } else {
         const v = run[c.key];
         text(ctx, fmtInt(v), rightX, baseline, `12px ${SANS}`, v === 0 ? T.neutral : T.ink2, 'right');
@@ -633,9 +635,10 @@ function unplottedNote(runs, axis) {
 /* -------------------------------------------------------------------- main */
 
 export async function exportView({
-  view, axis, runs, allRuns, state, meta, glossary, caveat, siteUrl, presetName,
+  view, axis, runs, allRuns, state, meta, glossary, caveat, siteUrl, presetName, subscriberNote,
 }) {
   if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  const exportTheme = activeTheme();
   const T = theme();
   const isChart = Boolean(axis);
   const isCoverage = view === 'coverage';
@@ -647,7 +650,7 @@ export async function exportView({
 
   const w = isChart ? 1100 : 1240;
   const sortCol = COLUMNS.find((c) => c.key === state.sort);
-  const sortLabel = `${sortCol ? sortCol.label : state.sort} ${state.dir === 'asc' ? 'ascending' : 'descending'}`;
+  const sortLabel = `${sortCol ? columnLabel(sortCol, state) : state.sort} ${state.dir === 'asc' ? 'ascending' : 'descending'}`;
 
   /* The definition line, and — only when there are any on this card — how many of
      the runs shown carry a note on their own figure. Measured before the canvas
@@ -656,7 +659,9 @@ export async function exportView({
   let defLines = [];
   if (isChart && caveat) {
     const flagged = axis.flag ? runs.filter((r) => r[axis.flag]).length : 0;
-    const defText = firstSentence(caveat)
+    // the subscriber definition is two short sentences and needs both: what the
+    // figure is, and the assumption it rests on
+    const defText = (axis.id === 'subscriber' ? caveat : firstSentence(caveat))
       + (flagged ? ` ${NOTE_MARK} ${flagged} of the ${runs.length} runs shown carry a note on how that figure was taken.` : '');
     defLines = wrapText(measure, defText, `11.5px ${SANS}`, w - PAD * 2);
   }
@@ -667,17 +672,23 @@ export async function exportView({
      THIS card, exactly as the key generates it from the runs on screen. */
   // coverage has no cost sentence of its own — the caption there is the order
   // note and the summary counts, added to the footer lines below instead
-  const costLine = (isChart ? axis.id === 'cost' : !isCoverage)
-    ? segmentsText(costSentence(runs, glossary))
-    : '';
+  // on subscriber cost the card carries its definition and which runs have no
+  // rate instead: the cost kinds describe dollar figures this card does not show
+  const subscriber = subscriberNote && costField(state) === 'subscriber_cost';
+  let costLine = '';
+  if (isChart && axis.id === 'subscriber') costLine = subscriberNote.coverage;
+  else if (subscriber && !isChart && !isCoverage) costLine = `${subscriberNote.definition} ${subscriberNote.coverage}`.trim();
+  else if (isChart ? axis.id === 'cost' : !isCoverage) costLine = segmentsText(costSentence(runs, glossary));
   const footerLines = [
     isChart
-      ? `${runs.length} of ${allRuns.length} runs shown — ${presetName}. ${resolveAxis(axis).noun} on a ${resolveAxis(axis).scale === 'log' ? 'logarithmic' : 'linear'} axis; the score axis stops above the board's best run, which is out of 105.`
+      ? `${runs.length} of ${allRuns.length} runs ${axis.id === 'subscriber' ? 'selected' : 'shown'} — ${presetName}. ${resolveAxis(axis).noun} on a ${resolveAxis(axis).scale === 'log' ? 'logarithmic' : 'linear'} axis; the score axis stops above the board's best run, which is out of 105.`
       : isCoverage
         ? `${runs.length} of ${allRuns.length} runs shown — ${presetName}.`
         : `${runs.length} of ${allRuns.length} runs shown — ${presetName}. Sorted by ${sortLabel}.`,
-    // a run with no figure on this map's measure is not drawn - the card says so, as the page does
-    isChart ? unplottedNote(runs, axis) : null,
+    // a run with no figure on this map's measure is not drawn - the card says so, as the page does.
+    // On the subscriber map they are every run without a rate, often a dozen or more: the cost line
+    // below counts them and says why, rather than this line naming each one
+    isChart && axis.id !== 'subscriber' ? unplottedNote(runs, axis) : null,
     'Score = planted bugs fixed, verified blind against a withheld answer key. Unplanted defects are real, but they are counted separately and never added to the score.',
     // the same sentence the page carries, because an exported PNG travels alone
     isChart || isCoverage ? null : BAR_SCALE_NOTE,
@@ -693,9 +704,16 @@ export async function exportView({
   let bodyH;
   if (isChart) {
     const plotW = w - PAD * 2;
+    // the legend lists the points drawn, not the runs selected: a run with no
+    // figure on this axis (a free run on a log axis, a run with no subscription
+    // rate) is off the map, and sizing for it leaves a band of empty plate
+    const onAxis = runs.filter((r) => {
+      const v = r[axis.key];
+      return v !== null && v !== undefined && (axis.scale !== 'log' || v > 0);
+    }).length;
     bodyH = 20 + Math.round(plotW * 0.5) + 8
       + (defLines.length ? 14 + defLines.length * 15 - 4 : 0)
-      + 16 + Math.ceil(runs.length / 3) * 17 + 16;
+      + 16 + Math.ceil(onAxis / 3) * 17 + 16;
   } else if (isCoverage) {
     // the same rhythm drawCoverage() draws in, so the canvas is never too
     // short (clipped) or too tall (a band of empty plate before the footer) —
@@ -738,7 +756,9 @@ export async function exportView({
   const a = document.createElement('a');
   a.href = url;
   // the view and the theme are both baked into the file name, so two exports never collide
-  a.download = `bug-hunt-bench-${isChart ? axis.slug : isCoverage ? 'coverage' : 'leaderboard'}-${activeTheme()}-${meta.updated}.png`;
+  const filenameView = isChart ? axis.slug : isCoverage ? 'coverage'
+    : subscriber ? 'leaderboard-subscriber' : 'leaderboard';
+  a.download = `bug-hunt-bench-${filenameView}-${exportTheme}-${meta.updated}.png`;
   document.body.appendChild(a);
   a.click();
   a.remove();

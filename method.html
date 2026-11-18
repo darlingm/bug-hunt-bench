@@ -13,7 +13,7 @@
 
 <!-- Same render-blocking theme stamp as the board: both pages share the theme,
      and a reader who picked dark on one must not get a white flash on the other. -->
-<script src="/assets/js/theme-boot.js?v=b6d46ab77f"></script>
+<script src="/assets/js/theme-boot.js?v=b13c489aa2"></script>
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Bug Hunt Bench">
@@ -36,11 +36,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&amp;family=Inter:wght@400;500;600&amp;display=swap">
-<link rel="stylesheet" href="/assets/css/site.css?v=b6d46ab77f">
+<link rel="stylesheet" href="/assets/css/site.css?v=b13c489aa2">
 
-<script type="module" src="/assets/js/method.js?v=b6d46ab77f"></script>
+<script type="module" src="/assets/js/method.js?v=b13c489aa2"></script>
 <!-- Microsoft Clarity analytics. A file, not an inline block: the CSP has no 'unsafe-inline'. -->
-<script src="/assets/js/clarity.js?v=b6d46ab77f" async></script>
+<script src="/assets/js/clarity.js?v=b13c489aa2" async></script>
 </head>
 <body>
 <a class="skip-link" href="#method">Skip to the method</a>
@@ -89,6 +89,19 @@
     <ol class="caveats" id="caveats-body"></ol>
   </section>
 
+  <!-- Rendered from data/subscriber-rates.json, the one hand-kept input on the
+       site, not from benchmark.json. Hidden until that file has loaded. -->
+  <section class="prose wrap" id="subscriber-cost" aria-labelledby="subscriber-title" hidden>
+    <p class="eyebrow">The other reading of the cost column</p>
+    <h2 id="subscriber-title">Subscriber cost</h2>
+    <div id="subscriber-body"></div>
+    <dl class="glossary" id="subscriber-rates"></dl>
+    <h3 class="eyebrow subhead" id="subscriber-caveats-title">Where it stops</h3>
+    <ol class="caveats" id="subscriber-caveats" aria-labelledby="subscriber-caveats-title"></ol>
+    <!-- the working behind the figures above: every source, its raw figure and the arithmetic -->
+    <p class="backlink--end"><a href="/docs/subscriber-rates.md">Source measurements and multiplier calculations (Markdown)</a></p>
+  </section>
+
   <section class="prose wrap" id="definitions" aria-labelledby="glossary-title">
     <p class="eyebrow">Read the columns right</p>
     <h2 id="glossary-title">Definitions</h2>
@@ -121,7 +134,7 @@
 <footer class="footer">
   <div class="wrap footer__inner">
     <p><strong>Bug Hunt Bench</strong> — built and run by <a href="https://www.productcompass.pm">Pawel Huryn</a>. Updated <time id="footer-updated" datetime="">&nbsp;</time>. <a href="/">Back to the board</a>. <a href="https://staygreen.io/s/bug-hunt-benchmark" target="_blank" rel="noopener" aria-label="Status (opens in a new tab)">Status</a>.</p>
-    <p>Every word on this page is read from <a href="/data/benchmark.json">data/benchmark.json</a>, generated from the <a href="https://github.com/phuryn/bug-hunt-bench/tree/main/results">public scoreboards</a>. Nothing here is typed by hand.</p>
+    <p>Every word on this page is read from <a href="/data/benchmark.json">data/benchmark.json</a>, generated from the <a href="https://github.com/phuryn/bug-hunt-bench/tree/main/results">public scoreboards</a>. Nothing here is typed by hand, with one exception: the subscriber-cost section is read from <a href="/data/subscriber-rates.json">data/subscriber-rates.json</a>, the one hand-kept source of plan assumptions, with its sources.</p>
   </div>
 </footer>
 </body>

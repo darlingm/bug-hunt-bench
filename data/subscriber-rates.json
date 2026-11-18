@@ -1,0 +1,64 @@
+{
+  "_about": "KEPT BY HAND - the one input on this site that is not generated. Each multiplier is the API-priced usage a $100-or-more plan's weekly allowance holds, per dollar of the plan's weekly fee. The board divides a run's generated cost_usd by it and calls the result subscriber cost. Change a multiplier only with a source, and update as_of with it. The working behind every figure is in docs/subscriber-rates.md; change the two together. See CLAUDE.md.",
+  "as_of": "2026-11-18",
+  "reference_plan_usd_month": 100,
+  "definition": "Subscriber cost allocates part of a $100+/month plan fee to a run, assuming you use the full weekly allowance. It is the run's API cost divided by the multiplier for its model family.",
+  "rates": [
+    {
+      "id": "claude",
+      "label": "Claude",
+      "name": "Claude, every model but Fable",
+      "vendor": "Anthropic",
+      "harness": "Claude Code",
+      "multiplier": 52,
+      "plans": "Claude Max $100 and Ultra $200",
+      "basis": "The 18 November comparison of Wokey, AI Coding Daily, SemiAnalysis and BenchLeader gives rounded weekly capacities of $1,200 on Max and $2,400 on Ultra. Each yields 52 API dollars per dollar of fee. On Ultra, Wokey's 18-account sample gave about 34 times the weekly fee. Theo Browne's three accounts averaged about 48 times, mulletiq measured about 54 times, and one account's request logs implied about 74 times.",
+      "sources": [
+        { "title": "Wokey's weekly plan measurements", "url": "https://wokey.ai/coding-plan-comparison" },
+        { "title": "Theo Browne: three Ultra accounts run to zero, about $2,200 a week", "url": "https://x.com/theo/status/2104683186215363058" },
+        { "title": "mulletiq: Claude Fable 5.2 on Max and Ultra, measured", "url": "https://mulletiq.com/blog/claude-fable-5-2-usage-limits" },
+        { "title": "Anthony Richter: the order you burn your Claude limits in", "url": "https://anthonyrichter.com/the-order-you-burn-your-claude-limits/" }
+      ]
+    },
+    {
+      "id": "fable",
+      "label": "Claude Fable",
+      "name": "Claude Fable",
+      "vendor": "Anthropic",
+      "harness": "Claude Code",
+      "model_prefix": "Fable",
+      "multiplier": 20,
+      "plans": "Claude Max $100 and Ultra $200",
+      "basis": "Fable draws from the same weekly allowance as every other Claude model, capped at half of it, and uses it faster per API dollar: about 2.2 times Opus 5.5 (a regression over 370 hourly meter readings, 95% interval 1.2 to 3.0), and about 2.4 times for Fable 5.2 and 3.3 times for Fable 5.1 on one Ultra account's request logs. The Claude multiplier divided by those ratios gives 16 to 24; 20 sits between. The board's Fable 5, 5.1 and later rows all use it.",
+      "sources": [
+        { "title": "Anthropic Help Center: Claude Fable on your plan", "url": "https://support.claude.com/en/articles/15424964-claude-fable-5-on-your-plan" },
+        { "title": "mulletiq: Claude Fable 5.2 on Max and Ultra, measured", "url": "https://mulletiq.com/blog/claude-fable-5-2-usage-limits" },
+        { "title": "Anthony Richter: the order you burn your Claude limits in", "url": "https://anthonyrichter.com/the-order-you-burn-your-claude-limits/" }
+      ]
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "name": "OpenAI",
+      "vendor": "OpenAI",
+      "harness": "Codex CLI",
+      "multiplier": 27,
+      "plans": "ChatGPT Pro $100, $200 and $500",
+      "basis": "On 29 October 2026 OpenAI doubled the Codex allowance on Pro $100 and $500 and matched the lower Pro $200 allowance to the higher one. InventiveHQ's Codex session logs measured Pro $100 at $330 to $380 a week before that change; doubled, that projects to about 29 to 33 times the weekly fee. On Pro $200, aiplans measured about 26.5 times after the change on one input-heavy Astra workload (conditional: the plan upgrade it relied on is user-reported), and Wokey's six-account sample of 16 November about 16 times. The board uses 27 as a pooled estimate across the three Pro tiers; the $500 tier is extrapolated.",
+      "sources": [
+        { "title": "inventivehq: Codex subscription usage, measured", "url": "https://inventivehq.com/blog/codex-subscription-usage-measured" },
+        { "title": "aiplans Pro $200 quota measurement and workload", "url": "https://aiplans.dev/en/quota-bench" },
+        { "title": "Wokey's weekly plan measurements", "url": "https://wokey.ai/coding-plan-comparison" },
+        { "title": "OpenAI Help Center on Pro tiers and the October allowance change", "url": "https://help.openai.com/en/articles/9793128-about-chatgpt-pro-tiers" }
+      ]
+    }
+  ],
+  "caveats": [
+    "It is an estimate built on an estimate. The run's dollar figure is already a list-rate estimate, and each multiplier is a judgment across a handful of published measurements that disagree: for Claude Ultra alone they run from 34 to 74 times the fee, about 2.2-fold. If you trust a different source, change the multipliers on the board; the link carries your figures.",
+    "It assumes you use the whole weekly allowance. A run that fits within your remaining allowance adds $0 to your bill. If you choose to continue on paid credits, the provider's credit pricing applies to the overage.",
+    "One multiplier per family. Before the October change a GPT-5.6 run bought about 1.6 times more API value per point of allowance than a GPT-6 run, nobody has published how much allowance GPT-6 Luna uses per dollar, and Fable 5.1 burned faster than Fable 5.2 on the one account that measured both. The board applies one figure per family anyway.",
+    "Cache-heavy agentic work, which is what these runs are, earns a lot of API dollars for little allowance, so measurements taken on it come out higher than measurements taken on lighter, more varied traffic.",
+    "The board estimates what comparable API usage would represent on a subscription. It applies the multipliers to Anthropic models run in Claude Code and OpenAI models run in Codex CLI. Other routes show a dash. The comparison covers individual plans at $100/month and above.",
+    "Plans change, and an allowance can be shared. Anthropic changed its limits on 30 October 2026 and OpenAI its Pro allowances on 29 October. On ChatGPT Plus and Pro, Codex already shares one allowance with ChatGPT Work, Word, Excel and PowerPoint, so the OpenAI figure assumes all of it goes to Codex; ChatGPT conversations reportedly join that pool in December. These figures are as of the date above."
+  ]
+}

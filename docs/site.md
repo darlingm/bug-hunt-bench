@@ -21,7 +21,8 @@ through any local server and it runs.
 ├── index.html                 THE BOARD: markup, head, JSON-LD
 ├── method.html                THE METHOD PAGE: method, caveats, definitions
 ├── data/
-│   └── benchmark.json         GENERATED — the single source of every number
+│   ├── benchmark.json         GENERATED — scores, recorded costs and other run measurements
+│   └── subscriber-rates.json  HAND-KEPT — subscriber-cost multipliers (see docs/subscriber-rates.md)
 ├── assets/
 │   ├── css/site.css           all styles for both pages, incl. responsive + print
 │   ├── favicon.svg
@@ -34,6 +35,7 @@ through any local server and it runs.
 │       ├── format.js          vocabularies, formatters, column model, DOM helpers
 │       ├── table.js           leaderboard table: colgroup, sortable head, rows
 │       ├── scatter.js         all three maps — one layout function, three axis specs
+│       ├── subscriber.js      subscriber cost: rate matching, multipliers, its sentence and fields
 │       ├── selector.js        run picker (native checkboxes, grouped by vendor)
 │       └── export-png.js      canvas renderer for "Export this view (PNG)"
 ├── netlify.toml               publish = repo root, no build command, /method rewrite
@@ -89,7 +91,10 @@ The runner's go-live step regenerates it together with the README leaderboard ta
 
 Everything on the page — every score, bar, tick, axis, label, definition and
 caveat — is read from that file at runtime. The page contains no duplicated
-figures, which is why a data refresh needs no other edit.
+figures, which is why a data refresh needs no other edit. The one exception is
+subscriber cost: it divides a recorded `cost_usd` by a plan multiplier from
+`data/subscriber-rates.json`, the one hand-kept source of plan assumptions. Its
+working and sources are in [subscriber-rates.md](subscriber-rates.md).
 
 A few strings are maintained by hand and are the only things that can drift.
 Every one of them is deliberately written without figures, so a data refresh
@@ -202,13 +207,15 @@ maintenance burden.
 
 ## Linkable state
 
-Selection, sort and view live in the query string:
+The query string carries the run selection, sort order, view and cost basis.
 
 ```
-?preset=featured|all|ceiling|clear     a named preset
+?preset=featured|all|ceiling|best-per-lab|subscription|clear   a named preset
 ?runs=<slug>,<slug>                    an explicit selection (slugs from run ids)
 ?sort=<column key>&dir=asc|desc        table sort
 ?view=table|scatter|time|turns|coverage   active view (scatter = score vs cost)
+?cost=subscriber                       show subscriber cost (default is API list price)
+?rate_openai=30                        custom multiplier, also rate_claude and rate_fable
 ```
 
 `https://…/?preset=ceiling&sort=cost_usd&dir=asc&view=scatter` reloads exactly
@@ -344,8 +351,9 @@ Every export bakes in the title, the "planted bugs only — extras are never add
 to the score" line, the update date, the selection and sort, and the site URL —
 read from the canonical tag, so it follows the domain — which is what keeps a
 screenshot of a screenshot attributable. The cost-tag warning is printed only
-where a dollar figure is actually on the card. The three views land as
-`bug-hunt-bench-{leaderboard|score-vs-cost|score-vs-time|score-vs-turns|coverage}-{theme}-{date}.png`.
+where a dollar figure is actually on the card. The filename records the view,
+theme and date. Subscriber-cost exports use `leaderboard-subscriber` or
+`score-vs-subscriber-cost` as the view.
 
 ## Deploy to Netlify
 

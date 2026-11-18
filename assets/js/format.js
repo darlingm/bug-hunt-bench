@@ -17,16 +17,32 @@ export const TOTALS = { fixed: 105, repo1_fixed: 45, repo2_fixed: 60 };
 export const BAR_SCALE_NOTE = 'Every bar is scaled to the longest figure among the runs shown, so the leader fills its column and the rest read as a share of it. The printed number is always the real one — the score is still out of 105.';
 
 /** The four bar scales, taken from the rows being drawn. One helper, because
-    the table and the PNG export must agree on the geometry. */
-export function barScales(runs) {
+    the table and the PNG export must agree on the geometry. The cost bar is
+    scaled on whichever cost the board is showing (see costField). */
+export function barScales(runs, costKey = 'cost_usd') {
   const maxOf = (key) => Math.max(0, ...runs.map((r) => r[key] || 0));
   return {
     fixedMax: maxOf('fixed'),
     extrasMax: maxOf('extras'),
     wallMax: maxOf('wall_min'),
-    costMax: maxOf('cost_usd'),
+    costMax: maxOf(costKey),
   };
 }
+
+/* The cost column has two readings: the run's own dollar figure (cost_usd, from
+   the data file) and what that run costs someone on a subscription
+   (subscriber_cost, stamped beside it by subscriber.js). The column, its sort
+   key in the URL and its place in COLUMNS stay `cost_usd` either way - a
+   ?sort=cost_usd link sorts whichever cost is on screen - and these two
+   helpers are the only places that know there is a second reading. */
+export const costField = (state) => (state && state.cost === 'subscriber' ? 'subscriber_cost' : 'cost_usd');
+
+/** A column's heading, which for the cost column follows the cost basis. */
+export const columnLabel = (c, state) => (c.key === 'cost_usd' && costField(state) === 'subscriber_cost'
+  ? 'Subscriber cost' : c.label);
+
+/** The field a sort key actually reads. */
+export const sortField = (state) => (state.sort === 'cost_usd' ? costField(state) : state.sort);
 
 /* The effort a run was asked for is the badge: MAX / XHIGH / HIGH / DEFAULT.
    The two-word status vocabulary that used to be printed beside it -
@@ -230,6 +246,9 @@ export function fmtDateLong(iso) {
 
 export function fmtCost(v) {
   if (v === null || v === undefined) return '—';
+  // a subscriber cost can fall below a cent, where two decimals would print $0.00
+  // for a run that was not free; no list-rate figure on the board is that small
+  if (v > 0 && v < 0.01) return '$' + v.toPrecision(1);
   return '$' + v.toFixed(2);
 }
 

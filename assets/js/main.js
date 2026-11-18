@@ -7,17 +7,21 @@
    and everything here that needs one of them links at the exact anchor. */
 
 import {
-  COLUMNS, BAR_SCALE_NOTE, NOTE_MARK, costSentence, firstSentence,
+  COLUMNS, BAR_SCALE_NOTE, NOTE_MARK, costSentence, segmentsText, firstSentence,
   caveatHref, defHref, methodHref, slugify, fmtDate, el, EFFORT_RANK,
-} from './format.js?v=b6d46ab77f';
-import { renderHead, renderBody, renderColgroup } from './table.js?v=b6d46ab77f';
+} from './format.js?v=b13c489aa2';
+import { renderHead, renderBody, renderColgroup } from './table.js?v=b13c489aa2';
 import {
   renderScatter, AXES, SCALES, scaledAxis, scaleSentence,
-} from './scatter.js?v=b6d46ab77f';
-import { renderPicker, refreshGroups } from './selector.js?v=b6d46ab77f';
-import { exportView } from './export-png.js?v=b6d46ab77f';
-import { initTheme, hasAdjustedColors } from './theme.js?v=b6d46ab77f';
-import { renderCoverage, coverageOrderNote, coverageSummaryNote } from './coverage.js?v=b6d46ab77f';
+} from './scatter.js?v=b13c489aa2';
+import {
+  loadSubscriberRates, rateParam, parseMultiplier, defaultMultipliers,
+  stampSubscriberCost, subscriberSentence, renderRateFields, syncRateFields,
+} from './subscriber.js?v=b13c489aa2';
+import { renderPicker, refreshGroups } from './selector.js?v=b13c489aa2';
+import { exportView } from './export-png.js?v=b13c489aa2';
+import { initTheme, hasAdjustedColors } from './theme.js?v=b13c489aa2';
+import { renderCoverage, coverageOrderNote, coverageSummaryNote } from './coverage.js?v=b13c489aa2';
 
 const PRESETS = {
   featured: { test: (r) => r.featured === true, name: 'Featured runs' },
@@ -42,6 +46,10 @@ const PRESETS = {
       return new Set([...bestByVendor.values()].map((r) => r.slug));
     },
   },
+  /* Every run a subscription covers - the ones that carry a subscriber cost
+     (subscriber.js). On subscriber cost the other rows show a dash, so this
+     is the selection that reading is for. */
+  subscription: { test: (r) => Boolean(r.subscriber_rate), name: 'Subscription runs' },
   clear: { test: () => false, name: 'Nothing selected' },
 };
 
@@ -106,10 +114,18 @@ const state = {
   // flip wall clock. Kept for the session; only the current map's choice goes in the
   // URL, and only when it differs from the default.
   scale: {},
+  // Which reading of the cost column the board shows: 'api' (cost_usd, from the
+  // data file) or 'subscriber' (subscriber_cost - see subscriber.js), and the
+  // multipliers that second reading is drawn with, by rate id.
+  cost: 'api',
+  mult: {},
 };
 
 let DATA = null;
 let RUNS = [];
+// data/subscriber-rates.json, or null if it could not be read - in which case
+// the board has one cost reading, and the control for the other is not shown
+let RATES = null;
 let SITE_URL = '';
 // set once at boot: whether any run on the board carries `fixed_bugs` at all
 let coverageEnabled = false;
@@ -131,6 +147,7 @@ function applyPreset(key) {
 
 function detectPreset() {
   for (const key of Object.keys(PRESETS)) {
+    if (key === 'subscription' && !RATES) continue;
     const set = presetSlugs(key, RUNS);
     if (set.size === state.selected.size && [...set].every((s) => state.selected.has(s))) {
       return key;
@@ -162,15 +179,37 @@ function sanitizePivot() {
 
 function readUrl() {
   const p = new URLSearchParams(location.search);
+  const preset = p.get('preset');
+  const unavailablePreset = !RATES && preset === 'subscription' && !p.has('runs');
+  const fallback = !RATES && (unavailablePreset || p.get('cost') === 'subscriber');
+  if (!RATES) {
+    const note = $('costbasis-note');
+    note.hidden = !fallback;
+    if (fallback) note.textContent = 'Subscriber cost is unavailable: the plan multipliers could not be loaded. The board is showing API list prices.';
+  }
+  /* The cost reading first: the "Subscription runs" preset selects on the
+     rates, so they have to be stamped before any preset is applied. A
+     multiplier the link carries is the reader's own and is honoured if it is a
+     usable number; anything else falls back to the file's figure, the way a
+     stale sort key falls back to the default sort. */
+  state.cost = RATES && p.get('cost') === 'subscriber' ? 'subscriber' : 'api';
+  state.mult = defaultMultipliers(RATES);
+  if (RATES) {
+    RATES.rates.forEach((r) => {
+      const v = parseMultiplier(p.get(rateParam(r.id)));
+      if (v !== null) state.mult[r.id] = v;
+    });
+  }
+  stampSubscriberCost(RUNS, RATES, state.mult);
+
   const runsParam = p.get('runs');
   if (runsParam !== null) {
     const wanted = new Set(runsParam.split(',').filter(Boolean));
     state.selected = new Set(RUNS.filter((r) => wanted.has(r.slug)).map((r) => r.slug));
     state.preset = detectPreset();
   } else {
-    const preset = p.get('preset');
     // own keys only: ?preset=toString would otherwise find Object.prototype's and throw
-    applyPreset(Object.hasOwn(PRESETS, preset) ? preset : 'featured');
+    applyPreset(Object.hasOwn(PRESETS, preset) && !unavailablePreset ? preset : 'featured');
   }
   /* A sort key that is no longer a column — an old ?sort=claimed_only link, say —
      is simply not applied, and the board opens on its default sort. A stale link
@@ -191,6 +230,7 @@ function readUrl() {
   // checked by sanitizePivot() on the first render, same as a link typed by
   // hand rather than produced by this page.
   state.pivot = p.get('pivot') || null;
+  return fallback;
 }
 
 function writeUrl() {
@@ -205,6 +245,13 @@ function writeUrl() {
     if (x !== VIEWS[state.view].axis.defaultScale) p.set('x', x);
   }
   if (state.pivot) p.set('pivot', state.pivot);
+  if (state.cost !== 'api') p.set('cost', state.cost);
+  // only a multiplier that differs from the file is the reader's own to carry
+  if (RATES) {
+    RATES.rates.forEach((r) => {
+      if (state.mult[r.id] !== r.multiplier) p.set(rateParam(r.id), String(state.mult[r.id]));
+    });
+  }
   const qs = p.toString();
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
 }
@@ -326,17 +373,36 @@ function tiersShown(runs) {
   }).map((t) => String(t).toUpperCase());
 }
 
+/** Sentence segments as nodes: a term links at its definition, a pointer at
+    its own address, and everything else is text. */
+function segmentNodes(seg) {
+  return seg.map((part) => {
+    if (part.def) return el('a', { class: 'deflink', href: defHref(part.def) }, [part.text]);
+    if (part.href) return el('a', { class: 'deflink', href: part.href }, [part.text]);
+    return document.createTextNode(part.text);
+  });
+}
+
 /** The generated cost sentence, with each kind linked at its own definition. */
 function costKey(runs) {
   const seg = costSentence(runs, DATA.glossary);
   if (!seg) return null;
-  const p = el('p', {});
-  seg.forEach((part) => {
-    p.appendChild(part.def
-      ? el('a', { class: 'deflink', href: defHref(part.def) }, [part.text])
-      : document.createTextNode(part.text));
-  });
-  return el('div', {}, [el('h3', { text: 'What the costs are' }), p]);
+  return el('div', {}, [el('h3', { text: 'What the costs are' }), el('p', {}, segmentNodes(seg))]);
+}
+
+/** The subscriber reading's own sentence: what the figure is, with the
+    multipliers in force, and which of the rows on screen have no rate. */
+function subscriberNote(runs) {
+  return subscriberSentence(runs, RATES, state.mult, methodHref('subscriber-cost'));
+}
+
+function subscriberKey(runs) {
+  const { definition, coverage } = subscriberNote(runs);
+  return el('div', {}, [
+    el('h3', { text: 'How subscriber cost is estimated' }),
+    el('p', {}, segmentNodes(definition)),
+    coverage.length ? el('p', {}, segmentNodes(coverage)) : null,
+  ]);
 }
 
 /* The badge is the tier the run asked for. Two statuses need a sentence, and
@@ -401,7 +467,7 @@ function renderKeys() {
       : null,
   ]));
 
-  const cost = costKey(runs);
+  const cost = state.cost === 'subscriber' ? subscriberKey(runs) : costKey(runs);
   if (cost) keys.appendChild(cost);
   keys.appendChild(effortKey(runs));
 
@@ -424,9 +490,12 @@ function renderKeys() {
 
 const lastChartWidth = { scatter: 0, time: 0, turns: 0 };
 
-/** A map's axis spec with the scale the reader has chosen for it. */
+/** A map's axis spec with the scale the reader has chosen for it. The cost map
+    follows the board's cost reading, so its tab, its panel, its scale choice and
+    its export stay the same view either way - only the x measure changes. */
 function axisFor(key) {
-  return scaledAxis(VIEWS[key].axis, state.scale[key]);
+  const spec = VIEWS[key].axis === AXES.cost && state.cost === 'subscriber' ? AXES.subscriber : VIEWS[key].axis;
+  return scaledAxis(spec, state.scale[key]);
 }
 
 /* The Log | Linear switch, built with the map it belongs to and placed by the
@@ -455,6 +524,9 @@ function scaleSwitch(key, A) {
 
 /** The sentence that belongs to a map, drawn inside the plate with the plot. */
 function chartFootnote(axisId) {
+  // on subscriber cost the plate says what that figure is; which runs have no
+  // rate is already said by the line under it that counts the runs left off
+  if (axisId === 'subscriber') return () => segmentNodes(subscriberNote(selectedRuns()).definition);
   const cav = chartCaveat(axisId);
   if (!cav) return null;
   return (L) => {
@@ -480,7 +552,8 @@ function renderChart(key) {
   legend.textContent = '';
   $(V.scaleNote).textContent = scaleSentence(A, RUNS);
   if (!runs.length) return;
-  const L = renderScatter($(V.host), runs, RUNS, A, chartFootnote(A.id), scaleSwitch(key, A));
+  const referencePlan = state.cost === 'subscriber' ? RATES.reference_plan_usd_month : null;
+  const L = renderScatter($(V.host), runs, RUNS, A, chartFootnote(A.id), scaleSwitch(key, A), referencePlan);
   lastChartWidth[key] = $(V.host).clientWidth;
   if (!L) return;
   L.points.slice().sort((a, b) => b.score - a.score).forEach((p) => {
@@ -567,9 +640,42 @@ function renderViews() {
     el('b', { text: `${runs.length} of ${RUNS.length}` }),
     ` selected · ${label}`,
   );
-  document.querySelectorAll('.preset').forEach((b) => {
+  document.querySelectorAll('[data-preset]').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.preset === state.preset));
   });
+  renderCostBasis();
+}
+
+/* The cost-basis control: which reading is on, and - only while subscriber cost
+   is - the multipliers it is drawn with. The fields are built once at boot and
+   kept in step here, never rebuilt, so typing into one keeps its caret. */
+function renderCostBasis() {
+  if (!RATES) return;
+  const sub = state.cost === 'subscriber';
+  document.querySelectorAll('[data-cost]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.cost === state.cost));
+  });
+  $('costbasis-rates').hidden = !sub;
+  $('costbasis-note').hidden = !sub;
+  // the caption names what the key under the table explains, for the reading on screen
+  $('caption-key-api').hidden = sub;
+  $('caption-key-subscriber').hidden = !sub;
+  syncRateFields($('costbasis-rates'), RATES, state.mult);
+}
+
+/** The static half of the control, from the rates file: the fields and the
+    line under them. Shown only once there is a file to draw them from. */
+function initCostBasis() {
+  if (!RATES) return;
+  renderRateFields($('costbasis-rates'), RATES, state, onMultiplier);
+  const note = $('costbasis-note');
+  note.textContent = '';
+  note.append(
+    `Subscriber cost allocates part of a $${RATES.reference_plan_usd_month}+/month plan fee to each run, assuming you use the full weekly allowance. The default multipliers express API dollars per dollar of plan fee, as of ${fmtDate(RATES.as_of)}. Change a multiplier and the link keeps your figures. `,
+    el('a', { class: 'deflink', href: methodHref('subscriber-cost') }, ['Sources and assumptions']),
+    '.',
+  );
+  $('costbasis').hidden = false;
 }
 
 function renderAll() {
@@ -610,6 +716,22 @@ function onToggleRun(slug, on) {
   writeUrl();
 }
 
+function onCostBasis(basis) {
+  if (basis === state.cost) return;
+  state.cost = basis;
+  renderViews();
+  writeUrl();
+}
+
+/** One multiplier changed - or, with no id, all of them back to the file's. */
+function onMultiplier(id, value) {
+  if (id === null) state.mult = defaultMultipliers(RATES);
+  else state.mult = { ...state.mult, [id]: value };
+  stampSubscriberCost(RUNS, RATES, state.mult);
+  renderViews();
+  writeUrl();
+}
+
 function onToggleVendor(group, on) {
   group.forEach((r) => {
     if (on) state.selected.add(r.slug);
@@ -619,7 +741,7 @@ function onToggleVendor(group, on) {
   renderAll();
 }
 
-function setView(view, focus) {
+function setView(view, focus, syncUrl = true) {
   state.view = VIEWS[view] ? view : 'table';
   document.querySelectorAll('.tab').forEach((t) => {
     const on = t.dataset.view === state.view;
@@ -638,15 +760,26 @@ function setView(view, focus) {
   });
   Object.entries(VIEWS).forEach(([k, V]) => { $(V.panel).hidden = k !== state.view; });
   renderViews();
-  writeUrl();
+  if (syncUrl) writeUrl();
+}
+
+function restoreViewFromUrl() {
+  const fallback = readUrl();
+  sanitizeView();
+  renderPickerIfOpen();
+  // A reload can recover the requested rates and selection after a temporary failure.
+  setView(state.view, false, !fallback);
 }
 
 function wire() {
-  document.querySelectorAll('.preset').forEach((btn) => {
+  document.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', () => {
       applyPreset(btn.dataset.preset);
       renderAll();
     });
+  });
+  document.querySelectorAll('[data-cost]').forEach((btn) => {
+    btn.addEventListener('click', () => onCostBasis(btn.dataset.cost));
   });
 
   $('picker').addEventListener('toggle', renderPickerIfOpen);
@@ -678,18 +811,33 @@ function wire() {
     exportBtn.textContent = 'Rendering…';
     try {
       const axis = VIEWS[state.view].axis ? axisFor(state.view) : null;
-      const cav = axis ? chartCaveat(axis.id) : null;
+      // Rendering can wait for fonts. Keep the costs and sort the reader clicked export on.
+      const allRuns = RUNS.map((r) => ({ ...r }));
+      const runs = allRuns.filter((r) => state.selected.has(r.slug));
+      // drawn without the method link: a card has nothing to click, and the
+      // site address is already in its footer
+      const note = state.cost === 'subscriber'
+        ? subscriberSentence(runs, RATES, state.mult, null, axis?.id === 'subscriber' ? axis.scale : null)
+        : null;
+      const flat = note ? {
+        definition: segmentsText(note.definition),
+        coverage: segmentsText(note.coverage),
+      } : null;
+      // on the subscriber map the line drawn with the plot is that figure's own definition
+      const cav = axis && axis.id === 'subscriber' ? { text: flat.definition }
+        : axis ? chartCaveat(axis.id) : null;
       await exportView({
         view: state.view,
         axis,
-        runs: selectedRuns(),
-        allRuns: RUNS,
-        state,
+        runs,
+        allRuns,
+        state: { ...state },
         meta: DATA.meta,
         glossary: DATA.glossary,
         caveat: cav ? cav.text : null,
         siteUrl: SITE_URL || location.origin + location.pathname,
         presetName: state.preset ? PRESETS[state.preset].name : 'Custom selection',
+        subscriberNote: flat,
       });
     } finally {
       exportBtn.classList.remove('is-busy');
@@ -697,12 +845,7 @@ function wire() {
     }
   });
 
-  window.addEventListener('popstate', () => {
-    readUrl();
-    sanitizeView();
-    renderAll();
-    setView(state.view);
-  });
+  window.addEventListener('popstate', restoreViewFromUrl);
 
   if (window.ResizeObserver) {
     CHART_VIEWS.forEach((k) => {
@@ -762,8 +905,15 @@ async function boot() {
   const canonical = document.querySelector('link[rel="canonical"]');
   SITE_URL = canonical ? canonical.href : '';
 
+  /* The rates file is fetched beside the data, and a failure to read it costs
+     the board its second cost reading, never the board: the switch and the
+     "Subscription runs" preset simply do not appear. */
+  const ratesReq = loadSubscriberRates();
   const res = await fetch('data/benchmark.json', { cache: 'no-cache' });
   DATA = await res.json();
+  RATES = await ratesReq;
+  const subPreset = document.querySelector('[data-preset="subscription"]');
+  if (subPreset) subPreset.hidden = !RATES;
 
   RUNS = newestPerTier(DATA.runs.filter((r) => !r.superseded)).map((r) => ({ ...r, slug: slugify(r.id) }));
 
@@ -788,13 +938,11 @@ async function boot() {
   renderHero();
   patchSchema();
 
-  readUrl();
-  sanitizeView();
   wire();
   // a theme change repaints every run colour, so the whole board is rebuilt
   initTheme(() => renderAll());
-  renderAll();
-  setView(state.view);
+  restoreViewFromUrl();
+  initCostBasis();
 
   // the board is real now; the placeholder has done its job
   ['board-skeleton', 'tickrule-skeleton'].forEach((id) => {

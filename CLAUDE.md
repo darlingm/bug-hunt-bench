@@ -25,6 +25,21 @@ The README leaderboard block (between the `leaderboard:start/end` markers), `ass
   annotations (a `color=` in an annotation is ignored for any mapped vendor).
 - These numbers are published and load-bearing. Someone's model ranking is on them.
 
+**The one exception: `data/subscriber-rates.json`.** It is kept by hand, on purpose, and it is the
+only input on the site that is. It holds the subscriber-cost multipliers (how many API-priced
+dollars a $100-or-more plan's weekly allowance holds per dollar of fee: Claude, Claude Fable,
+OpenAI), each with the plans it covers, the measurements it rests on and their sources. They are
+not a measurement of any run here; they are a judgment about the plans, which is why they are not
+in the generated file and why a reader can override them on the board. The board divides a run's
+generated `cost_usd` by one of them in `assets/js/subscriber.js` and nowhere else.
+
+- Change a multiplier only with a source: update its `basis` and `sources`, and `as_of`, in the
+  same edit. The method page prints all three. The full working - every source, its raw figure,
+  the conversion and what was left out - is in `docs/subscriber-rates.md`; update its tables in
+  the same commit, so the page and the working never disagree.
+- Nothing else is derived on the client. Do not take this file as precedent for computing any
+  other figure in the browser; that still belongs in the generator.
+
 ## What this site is not
 
 - **No build step, no framework, no npm, no `node_modules`.** Plain HTML, CSS and vanilla ES
@@ -43,6 +58,7 @@ The README leaderboard block (between the `leaderboard:start/end` markers), `ass
 index.html          the board: tick rule, run selector, leaderboard, three charts, coverage, PNG export
 method.html         served at /method: method, caveats, definitions (same data, no duplication)
 data/benchmark.json GENERATED upstream - read only
+data/subscriber-rates.json  HAND-KEPT subscriber-cost multipliers, with sources (see above)
 assets/css/site.css all styles, both themes, responsive + print
 assets/js/
   theme-boot.js     render-blocking, stamps data-theme before first paint (no flash)
@@ -53,6 +69,7 @@ assets/js/
   format.js         vocabularies, formatters, column model, DOM helpers
   table.js          leaderboard: colgroup, sortable head, rows
   scatter.js        all three charts (score vs cost, vs time, vs turns) from one renderer; log / linear per map
+  subscriber.js     subscriber cost: rate matching, the multipliers, its sentence and fields
   selector.js       run picker
   export-png.js     canvas renderer for "Export this view"
 stamp-assets.py     content-hashes CSS/JS URLs; runs on every Netlify deploy
@@ -115,6 +132,17 @@ Run `python stamp-assets.py` locally too if you want your working copy to match 
   `results/runs.csv`. Never estimate a missing one.
 - **`superseded` / `caveat` / `note`** attach to a row when present; surface them, don't drop them.
   They ride on the cell as a plain `title` — no marker, no disclosure row, no layout cost.
+- **`subscriber_cost`** is the cost column's second reading ("Costs shown as: Subscriber cost",
+  `?cost=subscriber`): `cost_usd` ÷ the run's multiplier from `data/subscriber-rates.json`, read as
+  the share of a $100-or-more plan's fee the run uses, assuming the full weekly allowance is used.
+  It is stamped on the run objects at runtime, never written to the data. Only runs whose vendor
+  AND harness match a rate get one (Anthropic in Claude Code, OpenAI in Codex CLI; a `model_prefix`
+  rate such as Fable beats the vendor's general one); every other row shows a dash and is left off
+  the map, and the key counts them. The column keeps its `cost_usd` key, so `?sort=cost_usd` sorts
+  whichever reading is on screen. A reader's own multipliers ride in the URL as `rate_<rate id>` and
+  appear beside the defaults in the key and the PNG. API list price stays the default view - it is the
+  measured figure, and keeps each run’s cost kind; subscriber cost is an estimate built on it. The
+  tooltip on every map also gives the share of the reference monthly plan’s week.
 
 The honesty apparatus *is* the product. Do not quietly simplify it away to save space.
 

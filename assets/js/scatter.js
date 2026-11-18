@@ -1,6 +1,8 @@
 /* The three maps: score against cost, against wall clock, and against turns.
    One layout function, one renderer, three axis specs — the only thing that differs
-   between them is the x measure, its scale and the sentence under the plot.
+   between them is the x measure, its scale and the sentence under the plot. The
+   cost map has a fourth spec, `subscriber`, for the board's other cost reading
+   (subscriber.js); it is the same map drawn on a different x, not a fourth view.
    Layout is computed in a pure function so the on-screen SVG and the PNG export
    cannot drift apart.
 
@@ -17,8 +19,9 @@
 import {
   pointLabels, fmtCost, fmtWall, fmtTurns, fmtDate, COST_KIND_LABEL, NOTE_MARK, svgEl, el, measureText, EFFORT_RANK,
   harnessShort,
-} from './format.js?v=b6d46ab77f';
-import { runColor } from './theme.js?v=b6d46ab77f';
+} from './format.js?v=b13c489aa2';
+import { runColor } from './theme.js?v=b13c489aa2';
+import { fmtShare } from './subscriber.js?v=b13c489aa2';
 
 const LABEL_FONT = '10.5px Inter, system-ui, sans-serif';
 const LOG_TICKS = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
@@ -48,6 +51,26 @@ export const AXES = {
     slug: 'score-vs-cost',
     fmt: fmtCost,
     flag: null,
+  },
+  /* The same map on the board's other cost reading (subscriber.js): main.js
+     swaps it in for `cost` while the board is on subscriber cost, keeping the
+     reader's log / linear choice. Its log ticks follow the selected rates. */
+  subscriber: {
+    id: 'subscriber',
+    key: 'subscriber_cost',
+    defaultScale: 'log',
+    name: 'Subscriber cost, USD',
+    nameCompact: 'Subscriber cost, USD',
+    noun: 'Subscriber cost',
+    unit: 'dollars',
+    better: 'cheaper to the left',
+    tickLabel: (t) => (t === 0 ? '$0' : `$${t}`),
+    corner: 'cheap and strong',
+    chartTitle: 'Score against subscriber cost',
+    slug: 'score-vs-subscriber-cost',
+    fmt: fmtCost,
+    flag: null,
+    missingWhy: 'Subscriber cost requires a recorded API cost on a supported route (Anthropic in Claude Code or OpenAI in Codex CLI).',
   },
   time: {
     id: 'time',
@@ -133,8 +156,8 @@ export function scaleSentence(axis, allRuns) {
 }
 
 /* What each map measures, in the words a sentence needs ("no turn figure"). */
-const MEASURE_NAME = { cost: 'cost', time: 'wall-clock', turns: 'turn' };
-const MEASURE_ARIA = { cost: 'run cost', time: 'wall clock', turns: 'turns taken' };
+const MEASURE_NAME = { cost: 'cost', subscriber: 'subscriber-cost', time: 'wall-clock', turns: 'turn' };
+const MEASURE_ARIA = { cost: 'run cost', subscriber: 'subscriber cost', time: 'wall clock', turns: 'turns taken' };
 
 /* The y-axis stops just above the best run on the whole board, not at 105 and
    not at the leaderboard's 100-unit bar reference either. Both answer the same
@@ -182,6 +205,16 @@ function linearTicks(hi, plotW) {
   return out;
 }
 
+/* Custom multipliers can put a single subscriber cost below a tenth of a
+   cent or above $100. Include a neighbouring tick on either side of its range. */
+function logTicksForRange(lo, hi) {
+  const ticks = [];
+  for (let exp = Math.floor(Math.log10(lo)); exp <= Math.ceil(Math.log10(hi)); exp += 1) {
+    for (const step of [1, 2, 5]) ticks.push(Number(`${step}e${exp}`));
+  }
+  return ticks;
+}
+
 export function scatterLayout(runs, allRuns, width, height, axis) {
   const A = resolveAxis(axis);
   const compact = width < 620;
@@ -214,9 +247,9 @@ export function scatterLayout(runs, allRuns, width, height, axis) {
   let plotted;
   if (A.scale === 'log') {
     const vals = fitTo((c) => isNum(c) && c > 0);
-    const ticks = A.logTicks || LOG_TICKS;
     let lo = vals.length ? Math.min(...vals) / 1.7 : 0.5;
     let hi = vals.length ? Math.max(...vals) * 1.7 : 100;
+    const ticks = A.logTicks || logTicksForRange(lo, hi);
     // a tight selection can fit between two ticks: widen to the neighbouring ticks so the axis always
     // carries at least two labelled steps and still reads as a logarithmic scale
     if (ticks.filter((t) => t >= lo && t <= hi).length < 2) {
@@ -359,7 +392,7 @@ function tipRow(label, value) {
   return el('div', { class: 'tip-row' }, [`${label}: ${value}`]);
 }
 
-function tooltipContent(p, axis) {
+function tooltipContent(p, axis, referencePlan) {
   const r = p.run;
   const kind = COST_KIND_LABEL[r.cost_kind] || r.cost_kind;
   const frag = document.createDocumentFragment();
@@ -369,14 +402,25 @@ function tooltipContent(p, axis) {
     `${r.model}${r.effort ? ` · ${r.effort}` : ''}`,
   ]));
   if (r.harness) frag.appendChild(tipRow('Harness', r.harness));
+  const costRows = [];
+  if (referencePlan) {
+    const estimate = r.subscriber_cost === null ? 'Unavailable'
+      : `${fmtCost(r.subscriber_cost)} (${r.subscriber_basis})`;
+    costRows.push(tipRow('Subscriber cost', estimate));
+    if (r.subscriber_week !== null) {
+      costRows.push(tipRow(`Share of a $${referencePlan}/month plan’s week`, fmtShare(r.subscriber_week)));
+    }
+  }
+  costRows.push(tipRow('Cost', `${fmtCost(r.cost_usd)}${kind ? ` (${kind})` : ''}`));
   const rows = {
-    cost: () => tipRow('Cost', `${fmtCost(r.cost_usd)} (${kind})`),
-    time: () => tipRow('Wall clock', `${fmtWall(r.wall_min)} min`),
-    turns: () => tipRow('Turns', r.turns === null || r.turns === undefined ? 'not counted' : fmtTurns(r.turns)),
+    cost: costRows,
+    time: [tipRow('Wall clock', `${fmtWall(r.wall_min)} min`)],
+    turns: [tipRow('Turns', r.turns === null || r.turns === undefined ? 'not counted' : fmtTurns(r.turns))],
   };
   // the measure this map is about goes first, the other two after it
-  const order = [axis.id, ...['cost', 'time', 'turns'].filter((k) => k !== axis.id)];
-  order.forEach((k) => { if (rows[k]) frag.appendChild(rows[k]()); });
+  const lead = axis.id === 'subscriber' ? 'cost' : axis.id;
+  const order = [lead, ...['cost', 'time', 'turns'].filter((k) => k !== lead)];
+  order.forEach((k) => frag.append(...rows[k]));
   frag.appendChild(tipRow('Unplanted, not scored', String(r.extras)));
   frag.appendChild(tipRow('Claimed only', String(r.claimed_only)));
   frag.appendChild(tipRow('Run date', fmtDate(r.date)));
@@ -385,7 +429,7 @@ function tooltipContent(p, axis) {
 
 /* `control`, when given, is placed straight after the plot: the page passes the
    log / linear switch, which CSS lifts onto the x-axis title row. */
-export function renderScatter(host, runs, allRuns, axis, footnote, control) {
+export function renderScatter(host, runs, allRuns, axis, footnote, control, referencePlan) {
   const A = resolveAxis(axis);
   host.classList.add('chart-host');
   host.textContent = '';
@@ -469,7 +513,7 @@ export function renderScatter(host, runs, allRuns, axis, footnote, control) {
 
   const showTip = (p, group) => {
     tip.textContent = '';
-    tip.appendChild(tooltipContent(p, A));
+    tip.appendChild(tooltipContent(p, A, referencePlan));
     tip.hidden = false;
     const hostW = host.clientWidth;
     const scale = hostW / width;
@@ -540,6 +584,7 @@ export function renderScatter(host, runs, allRuns, axis, footnote, control) {
     }
     if (missing.length) {
       parts.push(`${missing.length} selected run${missing.length === 1 ? ' carries' : 's carry'} no ${MEASURE_NAME[A.id] || 'cost'} figure.`);
+      if (A.missingWhy) parts.push(A.missingWhy);
     }
     parts.push(`${L.skipped === 1 ? 'It is' : 'They are'} in the table.`);
     host.appendChild(el('p', { class: 'chart__def chart__def--skip', text: parts.join(' ') }));

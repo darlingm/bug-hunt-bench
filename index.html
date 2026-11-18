@@ -15,7 +15,7 @@
      <html> before the first paint, so a dark-theme visitor never sees a white
      flash. It is a file rather than an inline block because the CSP has no
      'unsafe-inline'. -->
-<script src="/assets/js/theme-boot.js?v=b6d46ab77f"></script>
+<script src="/assets/js/theme-boot.js?v=b13c489aa2"></script>
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Bug Hunt Bench">
@@ -38,7 +38,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&amp;family=Inter:wght@400;500;600&amp;display=swap">
-<link rel="stylesheet" href="/assets/css/site.css?v=b6d46ab77f">
+<link rel="stylesheet" href="/assets/css/site.css?v=b13c489aa2">
 
 <!-- dateModified and url are patched at runtime from data/benchmark.json; keep the static values in sync anyway. -->
 <script type="application/ld+json" id="dataset-schema">
@@ -76,9 +76,9 @@
   ]
 }
 </script>
-<script type="module" src="/assets/js/main.js?v=b6d46ab77f"></script>
+<script type="module" src="/assets/js/main.js?v=b13c489aa2"></script>
 <!-- Microsoft Clarity analytics. A file, not an inline block: the CSP has no 'unsafe-inline'. -->
-<script src="/assets/js/clarity.js?v=b6d46ab77f" async></script>
+<script src="/assets/js/clarity.js?v=b13c489aa2" async></script>
 </head>
 <body>
 <a class="skip-link" href="#leaderboard">Skip to the leaderboard</a>
@@ -140,6 +140,7 @@
         <button type="button" class="preset" data-preset="all">All runs</button>
         <button type="button" class="preset" data-preset="ceiling">Ceiling runs only</button>
         <button type="button" class="preset" data-preset="best-per-lab">Best per lab</button>
+        <button type="button" class="preset" data-preset="subscription" hidden>Subscription runs</button>
         <button type="button" class="preset" data-preset="clear">Clear</button>
       </div>
     </div>
@@ -148,6 +149,19 @@
       <div class="picker__grid" id="picker-grid"></div>
       <p class="picker__note">A model can appear more than once — different reasoning tiers, or a different harness. Runs tagged <span class="tag tag--superseded">superseded</span> are historical and stay out of the default view.</p>
     </details>
+    <!-- The board's two readings of the cost column: the run's own dollar figure,
+         and what it costs on a $100-or-more subscription (assets/js/subscriber.js).
+         Hidden until data/subscriber-rates.json has loaded; the multiplier fields
+         and the line under them are built from that file, so no figure is typed here. -->
+    <div class="costbasis" id="costbasis" hidden>
+      <span class="costbasis__title" id="costbasis-title">Costs shown as</span>
+      <div class="presets" role="group" aria-labelledby="costbasis-title">
+        <button type="button" class="preset" data-cost="api" aria-pressed="true">API list price</button>
+        <button type="button" class="preset" data-cost="subscriber" aria-pressed="false">Subscriber cost</button>
+      </div>
+      <div class="costbasis__rates" id="costbasis-rates" role="group" aria-label="Subscriber cost multipliers" hidden></div>
+    </div>
+    <p class="costbasis__note" id="costbasis-note" hidden></p>
   </section>
 
   <section class="views wrap" id="leaderboard" aria-labelledby="views-title">
@@ -176,7 +190,7 @@
       <div class="tablewrap" id="tablewrap" tabindex="0" role="region" aria-label="Leaderboard table, scrollable">
         <table class="board" id="board">
           <caption class="board__caption" id="board-caption">
-            Ranked by planted bugs fixed, out of 105. Click a column heading to re-sort. The key under the table says how the bars are scaled and which of these costs are bills.
+            Ranked by planted bugs fixed, out of 105. Click a column heading to re-sort. <span id="caption-key-api">The key under the table says how the bars are scaled and which of these costs are bills.</span><span id="caption-key-subscriber" hidden>The key under the table says how the bars are scaled and how subscriber cost is estimated.</span>
             Every row's full note and caveat is on GitHub in <a href="https://github.com/phuryn/bug-hunt-bench/blob/main/results/run-notes.md">results/run-notes.md</a>.
           </caption>
           <thead id="board-head"></thead>
@@ -254,7 +268,7 @@
 <footer class="footer">
   <div class="wrap footer__inner">
     <p><strong>Bug Hunt Bench</strong> — built and run by <a href="https://www.productcompass.pm">Pawel Huryn</a>. Updated <time id="footer-updated" datetime="">&nbsp;</time>. <a href="/method">How it works, and what it does not tell you</a>. <a href="https://staygreen.io/s/bug-hunt-benchmark" target="_blank" rel="noopener" aria-label="Status (opens in a new tab)">Status</a>.</p>
-    <p>Every number on this page is read from <a href="/data/benchmark.json">data/benchmark.json</a>, generated from the <a href="https://github.com/phuryn/bug-hunt-bench/tree/main/results">public scoreboards</a>. Nothing here is typed by hand.</p>
+    <p>Every number on this page is read from <a href="/data/benchmark.json">data/benchmark.json</a>, generated from the <a href="https://github.com/phuryn/bug-hunt-bench/tree/main/results">public scoreboards</a>. Nothing here is typed by hand, with one exception: the plan multipliers behind subscriber cost are assumptions kept by hand, with their sources, in <a href="/data/subscriber-rates.json">data/subscriber-rates.json</a>, and <a href="/method#subscriber-cost">explained on the method page</a>.</p>
   </div>
 </footer>
 </body>

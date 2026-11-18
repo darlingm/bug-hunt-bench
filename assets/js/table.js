@@ -26,14 +26,16 @@
 import {
   COLUMNS, GROUPS, TOTALS, fmtCost, fmtWall, fmtInt,
   barRatio, barScales, effortSuffix, effortDefKey, defHref, el, svgEl, compareRuns,
-} from './format.js?v=b6d46ab77f';
-import { runColor } from './theme.js?v=b6d46ab77f';
+  costField, columnLabel, sortField,
+} from './format.js?v=b13c489aa2';
+import { runColor } from './theme.js?v=b13c489aa2';
 
 const MOBILE_LABEL = {
   fixed: 'Fixed of 105',
   extras: 'Unplanted (not scored)',
   wall_min: 'Wall clock (min)',
   cost_usd: 'Cost',
+  subscriber_cost: 'Subscriber cost',
 };
 
 function arrow(dir) {
@@ -93,12 +95,13 @@ export function renderHead(headEl, state, onSort) {
       class: cls.length ? cls.join(' ') : null,
       'aria-sort': active ? (state.dir === 'asc' ? 'ascending' : 'descending') : null,
     });
+    const label = columnLabel(c, state);
     const btn = el('button', {
       type: 'button',
       class: 'sortbtn',
-      title: `Sort by ${c.label}`,
+      title: `Sort by ${label}`,
     }, [
-      document.createTextNode(c.label),
+      document.createTextNode(label),
       c.unit ? el('span', { class: 'unit', text: c.unit }) : null,
       arrow(active ? state.dir : 'desc'),
     ]);
@@ -240,21 +243,34 @@ function wallCell(run, wallMax) {
 /* The dollar figure, and only the dollar figure. Which of these are bills, which
    are list-rate estimates and which are reconstructed lower bounds is one
    sentence in the key, built from the rows on screen - printing the tag under
-   all twenty-five of them was the same four words over and over. */
-function costCell(run, costMax) {
-  return el('td', { class: 'col--bar', role: 'cell', 'data-label': MOBILE_LABEL.cost_usd }, [
-    barRow('cost', barRatio(run.cost_usd, costMax), null,
-      el('span', { class: 'cost__val', text: fmtCost(run.cost_usd) })),
+   all twenty-five of them was the same four words over and over.
+
+   With the board on subscriber cost the cell shows that figure instead, on its
+   own bar scale. A run with no subscription rate shows a dash, and the dollar
+   figure it does have rides on the cell as a title, the way a wall-clock note
+   does - so the dash never reads as "unknown cost". */
+function costCell(run, costMax, key) {
+  const sub = key === 'subscriber_cost';
+  return el('td', {
+    class: 'col--bar',
+    role: 'cell',
+    'data-label': sub ? MOBILE_LABEL.subscriber_cost : MOBILE_LABEL.cost_usd,
+    title: sub && run.subscriber_cost === null && run.cost_usd !== null && run.cost_usd !== undefined
+      ? `No subscription rate for this route. Run cost: ${fmtCost(run.cost_usd)}.` : null,
+  }, [
+    barRow('cost', barRatio(run[key], costMax), null,
+      el('span', { class: 'cost__val', text: fmtCost(run[key]) })),
   ]);
 }
 
 export function renderBody(bodyEl, runs, state, glossary) {
   /* The scales come from the rows being drawn, so the leader fills its column
      and every other bar reads as a share of the leader. */
-  const { fixedMax, extrasMax, wallMax, costMax } = barScales(runs);
+  const costKey = costField(state);
+  const { fixedMax, extrasMax, wallMax, costMax } = barScales(runs, costKey);
   bodyEl.textContent = '';
   bodyEl.setAttribute('role', 'rowgroup');
-  const sorted = runs.slice().sort((a, b) => compareRuns(a, b, state.sort, state.dir));
+  const sorted = runs.slice().sort((a, b) => compareRuns(a, b, sortField(state), state.dir));
 
   sorted.forEach((run) => {
     const tr = el('tr', {
@@ -267,7 +283,7 @@ export function renderBody(bodyEl, runs, state, glossary) {
     tr.appendChild(scoreCell(run, fixedMax));
     tr.appendChild(extrasCell(run, extrasMax));
     tr.appendChild(wallCell(run, wallMax));
-    tr.appendChild(costCell(run, costMax));
+    tr.appendChild(costCell(run, costMax, costKey));
 
     // The head is generated from COLUMNS but the body is appended by hand, so the two
     // can drift: dropping the date column from COLUMNS left this row one cell longer
